@@ -1,0 +1,1483 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>น้องขิงหอม - ระบบจองคิวนวดแผนไทย อ.วัฒนานคร</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- Chart.js สำหรับทำกราฟแดชบอร์ด -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS สำหรับ Export เป็นไฟล์ Excel (.xlsx) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- FontAwesome & Google Fonts -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            matcha: { light: '#e8f5e9', DEFAULT: '#66bb6a', dark: '#2e7d32' },
+            sakura: { light: '#fce4ec', DEFAULT: '#f48fb1', dark: '#c2185b' },
+            wood: { light: '#f5f0eb', DEFAULT: '#d7ccc8', dark: '#8d6e63' }
+          },
+          fontFamily: { kanit: ['Kanit', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body { 
+      font-family: 'Kanit', sans-serif; 
+      background-color: #faf7f2; 
+      -webkit-tap-highlight-color: transparent; 
+    }
+    .bounce-subtle { animation: bounce 2s infinite; }
+    @keyframes bounce { 0%, 100% { transform: translateY(-5%); } 50% { transform: translateY(0); } }
+    
+    .chat-window {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transform-origin: bottom right;
+      z-index: 99999;
+      pointer-events: auto !important;
+    }
+    .chat-window.hidden-chat {
+      opacity: 0;
+      transform: scale(0.8) translateY(20px);
+      pointer-events: none !important;
+      display: none;
+    }
+
+    button, select, input, label, .clickable {
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+
+    .cal-day-cell {
+      min-height: 52px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.75rem;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: all 0.15s ease;
+      background-color: #ffffff;
+      border: 1px solid #e5e7eb;
+      padding: 2px;
+    }
+    .cal-day-cell:active:not(.disabled) {
+      background-color: #e8f5e9;
+      transform: scale(0.95);
+    }
+    .cal-day-cell.selected {
+      background-color: #2563eb !important;
+      color: white !important;
+      box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4);
+    }
+    .cal-day-cell.weekend-disabled {
+      opacity: 0.4;
+      background-color: #f3f4f6 !important;
+      color: #9ca3af !important;
+      cursor: not-allowed;
+      border-color: #e5e7eb !important;
+    }
+    .cal-day-cell.full-queue {
+      background-color: #fee2e2 !important;
+      border-color: #ef4444 !important;
+      color: #dc2626 !important;
+    }
+
+    @media print {
+      header, footer, .no-print, #chatWindow, button {
+        display: none !important;
+      }
+      body {
+        background-color: #ffffff !important;
+      }
+      main {
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .print-area {
+        box-shadow: none !important;
+        border: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="text-gray-700 min-h-screen flex flex-col justify-between">
+
+  <!-- Header Top Bar -->
+  <header class="bg-gradient-to-r from-matcha-dark via-matcha to-matcha-dark text-white p-4 shadow-md rounded-b-2xl relative z-30">
+    <div class="max-w-4xl mx-auto flex justify-between items-center">
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="showHomeView()">
+        <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center text-matcha-dark font-bold text-xl shadow">🌿</div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight">น้องขิงหอม</h1>
+          <p class="text-xs text-matcha-light">การแพทย์แผนไทย อ.วัฒนานคร</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="promptAdminLogin()" class="bg-white/20 active:bg-white/40 text-white text-xs px-3 py-1.5 rounded-full border border-white/40 transition">
+          <i class="fa-solid fa-lock mr-1"></i> จัดตารางเวร รพ.สต.
+        </button>
+        <button type="button" onclick="toggleAdminView()" class="bg-sakura active:bg-sakura-dark text-white text-xs px-3 py-1.5 rounded-full shadow transition">
+          <i class="fa-solid fa-chart-line mr-1"></i> แดชบอร์ด
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-4xl mx-auto p-4 flex-grow w-full pb-28 relative z-10">
+
+    <!-- WELCOME / HOME VIEW -->
+    <div id="view-home" class="max-w-md mx-auto space-y-4">
+      <div class="bg-white p-6 rounded-3xl shadow-sm border border-matcha-light text-center relative">
+        <div class="w-24 h-24 mx-auto bg-sakura-light rounded-full flex items-center justify-center text-5xl mb-3 shadow-inner bounce-subtle">
+          🫚
+        </div>
+        <h2 class="text-xl font-bold text-matcha-dark">ยินดีต้อนรับสู่ 'น้องขิงหอม' จองคิว</h2>
+        <p class="text-sm text-gray-500 mt-1">วันนี้มีอะไรให้ขิงหอมช่วยคะ ✨</p>
+
+        <!-- Quick Action Menu Buttons -->
+        <div class="grid grid-cols-2 gap-3 mt-6">
+          <button type="button" onclick="openModal('rates')" class="bg-matcha-light active:bg-matcha/30 text-matcha-dark font-medium p-3.5 rounded-2xl text-xs flex flex-col items-center justify-center space-y-1 shadow-sm transition">
+            <i class="fa-solid fa-list-check text-xl"></i>
+            <span>เช็กอัตราค่าบริการ</span>
+          </button>
+          <button type="button" onclick="showCheckQueueView()" class="bg-sakura-light active:bg-sakura/40 text-sakura-dark font-medium p-3.5 rounded-2xl text-xs flex flex-col items-center justify-center space-y-1 shadow-sm transition">
+            <i class="fa-regular fa-calendar-check text-xl"></i>
+            <span>เช็กตารางคิว & เวร</span>
+          </button>
+          <button type="button" onclick="showBookingForm()" class="bg-matcha active:bg-matcha-dark text-white font-bold p-3.5 rounded-2xl text-xs flex flex-col items-center justify-center space-y-1 shadow transition col-span-2">
+            <i class="fa-solid fa-calendar-plus text-2xl"></i>
+            <span class="text-sm">จองคิวนวดแผนไทย (วันราชการ)</span>
+          </button>
+          <button type="button" onclick="openModal('cancel-queue')" class="bg-wood-light active:bg-wood text-wood-dark font-medium p-3 rounded-2xl text-xs flex items-center justify-center space-x-2 col-span-2">
+            <i class="fa-solid fa-xmark-circle"></i>
+            <span>ยกเลิกคิว (ใช้เลขที่จอง)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHECK QUEUE VIEW -->
+    <div id="view-check-queue" class="max-w-md mx-auto hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <button type="button" onclick="showHomeView()" class="text-gray-500 hover:text-gray-700 text-sm py-1 px-2">
+          <i class="fa-solid fa-arrow-left mr-1"></i> ย้อนกลับ
+        </button>
+        <span class="text-xs font-semibold bg-sakura-light text-sakura-dark px-3 py-1 rounded-full">เช็กตารางคิว & เวรเจ้าหน้าที่</span>
+      </div>
+
+      <div class="bg-white p-4 rounded-3xl shadow-sm border border-matcha-light space-y-3">
+        <label class="block text-xs font-bold text-gray-700">1. เลือก รพ.สต. เพื่อดูสถานะเวรและคิว</label>
+        <select id="checkQueueHospital" onchange="onCheckHospitalChange()" class="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none bg-white">
+          <option value="">-- เลือก รพ.สต. --</option>
+          <option value="รพ.สต.บ้านหนองเทา">รพ.สต.บ้านหนองเทา</option>
+          <option value="รพ.สต.บ้านหนองหมากฝ้าย">รพ.สต.บ้านหนองหมากฝ้าย</option>
+          <option value="รพ.สต.บ้านแซร์ออ">รพ.สต.บ้านแซร์ออ</option>
+          <option value="รพ.สต.บ้านซับนกแก้ว">รพ.สต.บ้านซับนกแก้ว</option>
+          <option value="รพ.สต.บ้านหนองหอย">รพ.สต.บ้านหนองหอย</option>
+          <option value="รพ.สต.บ้านหนองน้ำใส">รพ.สต.บ้านหนองน้ำใส</option>
+          <option value="รพ.สต.บ้านหนองตะเคียนบอน">รพ.สต.บ้านหนองตะเคียนบอน</option>
+          <option value="รพ.สต.บ้านคลองทราย">รพ.สต.บ้านคลองทราย</option>
+          <option value="รพ.สต.บ้านห้วยเดื่อ">รพ.สต.บ้านห้วยเดื่อ</option>
+          <option value="รพ.สต.บ้านคลองมะนาว">รพ.สต.บ้านคลองมะนาว</option>
+          <option value="รพ.สต.บ้านใหม่ศรีจำปา">รพ.สต.บ้านใหม่ศรีจำปา</option>
+        </select>
+
+        <div id="checkQueueCalendarContainer" class="space-y-3 pt-2">
+          <div class="bg-blue-600 rounded-t-2xl p-3 text-center text-white shadow-sm">
+            <h3 class="font-bold text-2xl tracking-wide">ไทย</h3>
+            <div class="flex justify-between items-center px-2 mt-1">
+              <button type="button" onclick="changeMonth(-1, 'check')" class="hover:bg-white/20 text-white rounded-full w-9 h-9 flex items-center justify-center text-lg">❮</button>
+              <span id="checkCalMonthYear" class="text-lg font-bold">2569</span>
+              <button type="button" onclick="changeMonth(1, 'check')" class="hover:bg-white/20 text-white rounded-full w-9 h-9 flex items-center justify-center text-lg">❯</button>
+            </div>
+          </div>
+
+          <div class="bg-gray-50/50 p-3 rounded-b-2xl border border-t-0 border-gray-100">
+            <div class="grid grid-cols-7 text-center font-bold text-xs mb-2">
+              <span class="text-red-600">ส.</span>
+              <span class="text-red-600">อา.</span>
+              <span>จ.</span>
+              <span>อ.</span>
+              <span>พ.</span>
+              <span>พฤ.</span>
+              <span>ศ.</span>
+            </div>
+            <div id="checkCalGrid" class="grid grid-cols-7 gap-1.5 text-center"></div>
+          </div>
+        </div>
+
+        <div id="queueResultContainer" class="space-y-2 mt-3">
+          <p class="text-center text-xs text-gray-400 py-4">กรุณาเลือก รพ.สต. ด้านบนเพื่อตรวจสอบคิวและเวร</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOOKING FORM VIEW -->
+    <div id="view-booking" class="max-w-md mx-auto hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <button type="button" onclick="showHomeView()" class="text-gray-500 hover:text-gray-700 text-sm py-1 px-2">
+          <i class="fa-solid fa-arrow-left mr-1"></i> ย้อนกลับ
+        </button>
+        <span class="text-xs font-semibold bg-sakura-light text-sakura-dark px-3 py-1 rounded-full">ฟอร์มจองคิว (วันราชการ)</span>
+      </div>
+
+      <form id="bookingForm" onsubmit="handleFormSubmit(event)" class="bg-white p-5 rounded-3xl shadow-sm border border-matcha-light space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-gray-700 mb-1">1. เลือก รพ.สต. (อ.วัฒนานคร)</label>
+          <select id="hospitalSelect" onchange="onHospitalChange()" required class="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none bg-white">
+            <option value="">-- กรุณาเลือก รพ.สต. --</option>
+            <option value="รพ.สต.บ้านหนองเทา">รพ.สต.บ้านหนองเทา</option>
+            <option value="รพ.สต.บ้านหนองหมากฝ้าย">รพ.สต.บ้านหนองหมากฝ้าย</option>
+            <option value="รพ.สต.บ้านแซร์ออ">รพ.สต.บ้านแซร์ออ</option>
+            <option value="รพ.สต.บ้านซับนกแก้ว">รพ.สต.บ้านซับนกแก้ว</option>
+            <option value="รพ.สต.บ้านหนองหอย">รพ.สต.บ้านหนองหอย</option>
+            <option value="รพ.สต.บ้านหนองน้ำใส">รพ.สต.บ้านหนองน้ำใส</option>
+            <option value="รพ.สต.บ้านหนองตะเคียนบอน">รพ.สต.บ้านหนองตะเคียนบอน</option>
+            <option value="รพ.สต.บ้านคลองทราย">รพ.สต.บ้านคลองทราย</option>
+            <option value="รพ.สต.บ้านห้วยเดื่อ">รพ.สต.บ้านห้วยเดื่อ</option>
+            <option value="รพ.สต.บ้านคลองมะนาว">รพ.สต.บ้านคลองมะนาว</option>
+            <option value="รพ.สต.บ้านใหม่ศรีจำปา">รพ.สต.บ้านใหม่ศรีจำปา</option>
+          </select>
+        </div>
+
+        <div id="therapistSection" class="hidden">
+          <label class="block text-xs font-bold text-gray-700 mb-1">2. เลือกหมอนวด / ผู้ให้บริการ</label>
+          <div id="therapistList" class="space-y-2"></div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-700 mb-1">3. เลือกรายการบริการ</label>
+          <select id="serviceSelect" onchange="onServiceChange()" required class="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none bg-white">
+            <option value="">-- เลือกรายการบริการ --</option>
+            <option value="1. นวดบำบัด">1. นวดบำบัด</option>
+            <option value="2. นวดพร้อมประคบ">2. นวดพร้อมประคบ</option>
+            <option value="3. นวดน้ำมันหอมระเหย">3. นวดน้ำมันหอมระเหย</option>
+            <option value="4. อบสมุนไพร">4. อบสมุนไพร</option>
+            <option value="5. ทับหม้อเกลือ">5. ทับหม้อเกลือ (ฟื้นฟูมารดา)</option>
+            <option value="6. ขัดพอกผิว">6. ขัดพอกผิว</option>
+            <option value="7. นวดหน้า ขัดพอกหน้า">7. นวดหน้า ขัดพอกหน้า</option>
+            <option value="8. นวดเท้าเพื่อสุขภาพ">8. นวดเท้าเพื่อสุขภาพ</option>
+            <option value="9. ประคบเฉพาะที่ 30 นาที">9. ประคบเฉพาะที่ (30 นาที)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-700 mb-1">4. เลือกระยะเวลาการบริการ</label>
+          <select id="durationSelect" onchange="calculatePrice()" required class="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none bg-white">
+            <option value="1 ชั่วโมง">1 ชั่วโมง</option>
+            <option value="1 ชั่วโมง 30 นาที">1 ชั่วโมง 30 นาที</option>
+            <option value="2 ชั่วโมง">2 ชั่วโมง</option>
+            <option value="2 ชั่วโมง 30 นาที">2 ชั่วโมง 30 นาที</option>
+            <option value="3 ชั่วโมง">3 ชั่วโมง</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-700 mb-1">5. สิทธิการรักษา</label>
+          <select id="rightsSelect" onchange="calculatePrice()" required class="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none bg-white">
+            <option value="UC">บัตรทอง (UC)</option>
+            <option value="UC ทุพพลภาพ">บัตรทอง ทุพพลภาพ (UC ทุพพลภาพ)</option>
+            <option value="ประกันสังคม">ประกันสังคม</option>
+            <option value="จ่ายตรง/อปท.">ข้าราชการ จ่ายตรง / อปท.</option>
+            <option value="รัฐวิสาหกิจ/ชำระเอง">รัฐวิสาหกิจ / ชำระเงินเอง</option>
+          </select>
+        </div>
+
+        <!-- กล่องสรุปคำนวณค่าบริการและส่วนต่างตามสิทธิ์ -->
+        <div class="bg-matcha-light/40 p-4 rounded-2xl border border-matcha-light space-y-1.5 text-xs">
+          <div class="flex justify-between items-center text-gray-600">
+            <span>ค่าบริการเบื้องต้น/ตามสิทธิ์:</span>
+            <span id="basePriceDisplay" class="font-semibold">0 บาท</span>
+          </div>
+          <div class="flex justify-between items-center text-sakura-dark font-medium">
+            <span>ส่วนต่างที่ต้องจ่ายเพิ่ม:</span>
+            <span id="extraFeeDisplay" class="font-bold">0 บาท</span>
+          </div>
+          <div class="border-t border-matcha/20 pt-1.5 flex justify-between items-center text-matcha-dark font-bold text-sm">
+            <span>รวมค่าบริการสุทธิที่ต้องชำระ:</span>
+            <span id="totalPriceDisplay" class="text-base">0 บาท</span>
+          </div>
+        </div>
+
+        <!-- CALENDAR IN BOOKING FORM -->
+        <div class="space-y-2">
+          <label class="block text-xs font-bold text-gray-700">6. เลือกวันที่ต้องการจองบนปฏิทิน (จันทร์-ศุกร์เท่านั้น)</label>
+          
+          <div class="bg-blue-600 rounded-t-2xl p-3 text-center text-white shadow-sm">
+            <h3 class="font-bold text-xl tracking-wide">ไทย</h3>
+            <div class="flex justify-between items-center px-2 mt-1">
+              <button type="button" onclick="changeMonth(-1, 'book')" class="hover:bg-white/20 text-white rounded-full w-9 h-9 flex items-center justify-center text-lg">❮</button>
+              <span id="bookCalMonthYear" class="text-lg font-bold">2569</span>
+              <button type="button" onclick="changeMonth(1, 'book')" class="hover:bg-white/20 text-white rounded-full w-9 h-9 flex items-center justify-center text-lg">❯</button>
+            </div>
+          </div>
+          <div class="bg-gray-50 p-3 rounded-b-2xl border border-t-0 border-gray-100">
+            <div class="grid grid-cols-7 text-center font-bold text-xs mb-2">
+              <span class="text-red-600">ส.</span>
+              <span class="text-red-600">อา.</span>
+              <span>จ.</span>
+              <span>อ.</span>
+              <span>พ.</span>
+              <span>พฤ.</span>
+              <span>ศ.</span>
+            </div>
+            <div id="bookCalGrid" class="grid grid-cols-7 gap-1.5 text-center"></div>
+          </div>
+          <input type="hidden" id="bookingDate" required>
+          <p class="text-[11px] text-matcha-dark font-bold text-center mt-1" id="selectedDateText">ยังไม่ได้เลือกวัน</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-700 mb-1">7. เวลาเริ่ม (09:00 - 15:00 น. | ปิดพักเที่ยง 12:00-13:00)</label>
+          <input type="time" id="startTime" min="09:00" max="15:00" onchange="validateTimeLunch(this)" required class="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none bg-white">
+          <p class="text-[10px] text-red-500 mt-1">*ห้ามจองช่วงเวลาพักเที่ยง 12:00 - 13:00 น.</p>
+        </div>
+
+        <div class="space-y-2 border-t pt-3">
+          <label class="block text-xs font-bold text-gray-700">ข้อมูลผู้รับบริการ</label>
+          <input type="text" id="fullName" placeholder="ชื่อ - นามสกุล" required class="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none">
+          
+          <div class="grid grid-cols-3 gap-2">
+            <select id="genderSelect" required class="text-xs p-3 rounded-xl border border-gray-200 outline-none bg-white">
+              <option value="หญิง">หญิง</option>
+              <option value="ชาย">ชาย</option>
+            </select>
+            <input type="number" id="ageInput" placeholder="อายุ (ปี)" min="1" max="120" required class="text-xs p-3 rounded-xl border border-gray-200 outline-none">
+            <select id="occupationSelect" required class="text-xs p-3 rounded-xl border border-gray-200 outline-none bg-white">
+              <option value="เกษตรกรรม">เกษตรกรรม</option>
+              <option value="ค้าขาย/ธุรกิจส่วนตัว">ค้าขาย/ธุรกิจ</option>
+              <option value="รับจ้าง/ใช้แรงงาน">รับจ้าง</option>
+              <option value="ข้าราชการ/พนักงานรัฐ">ข้าราชการ</option>
+              <option value="นักเรียน/นักศึกษา">นักเรียน/นักศึกษา</option>
+              <option value="อื่นๆ">อื่นๆ</option>
+            </select>
+          </div>
+
+          <input type="tel" id="phone" placeholder="เบอร์โทรศัพท์" required class="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none">
+        </div>
+
+        <div class="bg-sakura-light/50 p-3 rounded-2xl space-y-2 border border-sakura-light">
+          <label class="block text-xs font-bold text-sakura-dark">🩺 คัดกรองสุขภาพ</label>
+          <label class="flex items-center space-x-2 text-xs py-1">
+            <input type="checkbox" id="noDisease" onchange="toggleDiseaseInput()" class="rounded text-matcha w-4 h-4">
+            <span>ไม่มีโรคประจำตัว / สุขภาพแข็งแรงดี</span>
+          </label>
+          <div id="diseaseContainer">
+            <textarea id="medicalCondition" rows="2" placeholder="โรคประจำตัว / ข้อควรระวัง..." class="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none bg-white"></textarea>
+          </div>
+          <textarea id="symptoms" rows="2" placeholder="อาการเพิ่มเติม (เช่น ปวดบ่าไหล่)..." class="w-full text-xs p-3 rounded-xl border border-gray-200 outline-none bg-white"></textarea>
+        </div>
+
+        <label class="flex items-start space-x-2 text-[11px] text-gray-500 py-1">
+          <input type="checkbox" required id="consent" class="mt-0.5 rounded text-matcha w-4 h-4">
+          <span>ยินยอมให้ รพ.สต. จัดเก็บข้อมูลเพื่อให้บริการแพทย์แผนไทย</span>
+        </label>
+
+        <button type="submit" id="submitBtn" class="w-full bg-matcha active:bg-matcha-dark text-white font-bold py-3.5 rounded-2xl shadow-md text-sm transition">
+          ยืนยันการจองคิว
+        </button>
+      </form>
+    </div>
+
+    <!-- 📅 ADMIN SHIFT SCHEDULING VIEW (หน้าจัดตารางเวร รพ.สต. บันทึกทีเดียวทั้งเดือน) -->
+    <div id="view-shift-admin" class="hidden space-y-4">
+      <div class="flex items-center justify-between">
+        <button type="button" onclick="showHomeView()" class="text-gray-500 hover:text-gray-700 text-sm py-1 px-2">
+          <i class="fa-solid fa-arrow-left mr-1"></i> หน้าหลัก
+        </button>
+        <span id="loggedInHospitalBadge" class="text-xs font-semibold bg-matcha-light text-matcha-dark px-3 py-1 rounded-full">รพ.สต. (กำลังจัดการ)</span>
+      </div>
+
+      <div class="bg-white p-5 rounded-3xl shadow-sm border border-matcha-light space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+          <div>
+            <h2 class="font-bold text-matcha-dark text-base flex items-center gap-2">
+              <span>📅 จัดเวร & สถานะการให้บริการ (บันทึกทีเดียว)</span>
+            </h2>
+            <p class="text-xs text-gray-500 mt-0.5">แตะวันที่ต้องการเพื่อหมุนเปลี่ยนสถานะ (ว่าง ➔ เต็ม ➔ ระบุเวลา) แล้วกดปุ่มบันทึกด้านล่าง</p>
+          </div>
+          <button type="button" onclick="saveAllShiftSchedules()" class="bg-matcha hover:bg-matcha-dark text-white text-xs px-4 py-2.5 rounded-xl font-bold shadow transition flex items-center gap-1.5">
+            <i class="fa-solid fa-floppy-disk text-sm"></i> บันทึกตารางเวรทั้งหมดของเดือนนี้
+          </button>
+        </div>
+
+        <div class="bg-blue-600 rounded-t-2xl p-3 text-center text-white shadow-sm">
+          <h3 class="font-bold text-xl tracking-wide">ตั้งค่าเวรประจำเดือน</h3>
+          <div class="flex justify-between items-center px-2 mt-1">
+            <button type="button" onclick="changeShiftMonth(-1)" class="hover:bg-white/20 text-white rounded-full w-9 h-9 flex items-center justify-center text-lg">❮</button>
+            <span id="shiftCalMonthYear" class="text-lg font-bold">2569</span>
+            <button type="button" onclick="changeShiftMonth(1)" class="hover:bg-white/20 text-white rounded-full w-9 h-9 flex items-center justify-center text-lg">❯</button>
+          </div>
+        </div>
+
+        <div class="bg-gray-50 p-3 rounded-b-2xl border border-t-0 border-gray-100">
+          <div class="grid grid-cols-7 text-center font-bold text-xs mb-2">
+            <span class="text-red-600">ส.</span>
+            <span class="text-red-600">อา.</span>
+            <span>จ.</span>
+            <span>อ.</span>
+            <span>พ.</span>
+            <span>พฤ.</span>
+            <span>ศ.</span>
+          </div>
+          <div id="shiftCalGrid" class="grid grid-cols-7 gap-1.5 text-center"></div>
+        </div>
+
+        <div class="bg-matcha-light/30 p-3 rounded-2xl text-xs text-matcha-dark flex items-center justify-between">
+          <span>💡 <b>คำแนะนำ:</b> แตะที่ช่องวันจันทร์-ศุกร์ เพื่อสลับสถานะ (🟢 ว่าง ➔ 🔴 คิวเต็ม ➔ ⏰ กำหนดเวลา) แล้วกดปุ่มบันทึกสีเขียวได้เลยค่ะ</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 📊 ADMIN & DASHBOARD VIEW -->
+    <div id="view-admin" class="hidden space-y-5 print-area">
+      
+      <!-- 🖨️ ส่วนหัวกระดาษสำหรับพิมพ์ PDF -->
+      <div class="hidden print:block text-center space-y-1 pb-4 border-b-2 border-matcha-dark">
+        <div class="flex justify-center items-center space-x-2">
+          <span class="text-2xl">🌿</span>
+          <h1 class="text-lg font-bold text-gray-800">รายงานสถิติการให้บริการการแพทย์แผนไทยและการแพทย์ทางเลือก</h1>
+        </div>
+        <p class="text-xs font-semibold text-matcha-dark">สำนักงานสาธารณสุขอำเภอวัฒนานคร จังหวัดสระแก้ว</p>
+        <p id="printTimestamp" class="text-[10px] text-gray-500"></p>
+      </div>
+
+      <!-- Header Dashboard & Control Filters -->
+      <div class="bg-white p-5 rounded-3xl shadow-sm border border-matcha-light space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+          <div>
+            <h2 class="font-bold text-matcha-dark text-base flex items-center gap-2">
+              <span>📊 แดชบอร์ดสรุปบริการการแพทย์แผนไทย</span>
+            </h2>
+            <p class="text-xs text-gray-400">กลุ่มงานส่งเสริมสุขภาพ อ.วัฒนานคร จ.สระแก้ว</p>
+          </div>
+          <div class="flex items-center gap-2 no-print">
+            <button type="button" onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-2 rounded-xl font-medium shadow-sm transition flex items-center gap-1.5">
+              <i class="fa-solid fa-file-excel text-sm"></i> Export Excel
+            </button>
+            <button type="button" onclick="printDashboard()" class="bg-sakura hover:bg-sakura-dark text-white text-xs px-3 py-2 rounded-xl font-medium shadow-sm transition flex items-center gap-1.5">
+              <i class="fa-solid fa-print text-sm"></i> พิมพ์ / Save PDF
+            </button>
+            <button type="button" onclick="showHomeView()" class="bg-gray-200 text-gray-700 text-xs px-3 py-2 rounded-xl font-medium">ออก</button>
+          </div>
+        </div>
+
+        <!-- Filters selector -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 no-print">
+          <div>
+            <label class="block text-xs font-bold text-gray-700 mb-1">เลือก รพ.สต. ของคุณ</label>
+            <select id="dashHospitalFilter" onchange="updateDashboardView()" class="w-full text-xs p-2.5 rounded-xl border border-gray-200 bg-matcha-light/30 outline-none font-medium">
+              <option value="ALL">-- แสดงภาพรวมทุก รพ.สต. (อ.วัฒนานคร) --</option>
+              <option value="รพ.สต.บ้านหนองเทา">รพ.สต.บ้านหนองเทา</option>
+              <option value="รพ.สต.บ้านหนองหมากฝ้าย">รพ.สต.บ้านหนองหมากฝ้าย</option>
+              <option value="รพ.สต.บ้านแซร์ออ">รพ.สต.บ้านแซร์ออ</option>
+              <option value="รพ.สต.บ้านซับนกแก้ว">รพ.สต.บ้านซับนกแก้ว</option>
+              <option value="รพ.สต.บ้านหนองหอย">รพ.สต.บ้านหนองหอย</option>
+              <option value="รพ.สต.บ้านหนองน้ำใส">รพ.สต.บ้านหนองน้ำใส</option>
+              <option value="รพ.สต.บ้านหนองตะเคียนบอน">รพ.สต.บ้านหนองตะเคียนบอน</option>
+              <option value="รพ.สต.บ้านคลองทราย">รพ.สต.บ้านคลองทราย</option>
+              <option value="รพ.สต.บ้านห้วยเดื่อ">รพ.สต.บ้านห้วยเดื่อ</option>
+              <option value="รพ.สต.บ้านคลองมะนาว">รพ.สต.บ้านคลองมะนาว</option>
+              <option value="รพ.สต.บ้านใหม่ศรีจำปา">รพ.สต.บ้านใหม่ศรีจำปา</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-700 mb-1">ช่วงเวลาที่ต้องการดูสถิติ</label>
+            <select id="dashTimeFilter" onchange="updateDashboardView()" class="w-full text-xs p-2.5 rounded-xl border border-gray-200 bg-sakura-light/30 outline-none font-medium">
+              <option value="ALL">ข้อมูลทั้งหมด</option>
+              <option value="THIS_MONTH">เฉพาะเดือนนี้</option>
+              <option value="THIS_YEAR">ปีงบประมาณนี้</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-matcha-light p-4 rounded-3xl border border-matcha/30 shadow-sm text-center">
+          <p class="text-xs text-matcha-dark font-medium">ผู้รับบริการรวม</p>
+          <p id="dashKpiTotal" class="text-2xl font-bold text-matcha-dark mt-1">0</p>
+          <p class="text-[10px] text-gray-500">คน / ครั้ง</p>
+        </div>
+        <div class="bg-sakura-light p-4 rounded-3xl border border-sakura/30 shadow-sm text-center">
+          <p class="text-xs text-sakura-dark font-medium">รายรับรวม</p>
+          <p id="dashKpiIncome" class="text-2xl font-bold text-sakura-dark mt-1">0 ฿</p>
+          <p class="text-[10px] text-gray-500">บาท</p>
+        </div>
+        <div class="bg-wood-light p-4 rounded-3xl border border-wood/40 shadow-sm text-center">
+          <p class="text-xs text-wood-dark font-medium">อัตราส่วนเพศ (ชาย : หญิง)</p>
+          <p id="dashKpiGenderRatio" class="text-lg font-bold text-wood-dark mt-1">0 : 0</p>
+          <p class="text-[10px] text-gray-500">สัดส่วนผู้ใช้บริการ</p>
+        </div>
+        <div class="bg-blue-50 p-4 rounded-3xl border border-blue-200 shadow-sm text-center">
+          <p class="text-xs text-blue-700 font-medium">บริการยอดนิยม</p>
+          <p id="dashKpiTopService" class="text-xs font-bold text-blue-900 mt-2 truncate">นวดประคบ</p>
+          <p class="text-[10px] text-gray-500">รับบริการมากที่สุด</p>
+        </div>
+      </div>
+
+      <!-- Charts Section -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white p-4 rounded-3xl shadow-sm border border-matcha-light">
+          <h3 class="text-xs font-bold text-matcha-dark mb-3"><i class="fa-solid fa-chart-column mr-1"></i> จำนวนผู้รับบริการ & รายได้รายเดือน</h3>
+          <div class="relative h-56">
+            <canvas id="chartMonthly"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-3xl shadow-sm border border-sakura-light">
+          <h3 class="text-xs font-bold text-sakura-dark mb-3"><i class="fa-solid fa-chart-pie mr-1"></i> สัดส่วนเพศผู้รับบริการ</h3>
+          <div class="relative h-56 flex justify-center">
+            <canvas id="chartGender"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-3xl shadow-sm border border-wood-light">
+          <h3 class="text-xs font-bold text-wood-dark mb-3"><i class="fa-solid fa-users mr-1"></i> จำแนกผู้ใช้บริการตามกลุ่มอายุ</h3>
+          <div class="relative h-56">
+            <canvas id="chartAge"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-3xl shadow-sm border border-matcha-light">
+          <h3 class="text-xs font-bold text-matcha-dark mb-3"><i class="fa-solid fa-briefcase mr-1"></i> จำแนกผู้ใช้บริการตามอาชีพ</h3>
+          <div class="relative h-56">
+            <canvas id="chartOccupation"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Booking List Table -->
+      <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 space-y-3">
+        <h3 class="text-xs font-bold text-gray-700"><i class="fa-solid fa-list mr-1"></i> รายการจองคิวบริการล่าสุด</h3>
+        <div id="adminBookingList" class="space-y-2 max-h-96 overflow-y-auto pr-1"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- 🤖 FLOATING CHATBOT WINDOW -->
+  <div class="fixed bottom-4 right-4 z-[99999] flex flex-col items-end no-print pointer-events-auto">
+    <div id="chatWindow" class="chat-window hidden-chat w-80 md:w-96 bg-white rounded-3xl shadow-2xl border border-matcha-light flex flex-col overflow-hidden mb-3 h-[420px]">
+      <div class="bg-gradient-to-r from-matcha to-matcha-dark text-white p-3 flex justify-between items-center cursor-pointer" onclick="toggleChatWindow()">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center text-lg">🫚</div>
+          <div>
+            <h3 class="font-bold text-xs">น้องขิงหอม AI</h3>
+            <p class="text-[10px] text-matcha-light">ประเมินอาการ & ตัดสินใจเส้นทางรักษา 24 ชม.</p>
+          </div>
+        </div>
+        <button type="button" onclick="toggleChatWindow(); event.stopPropagation();" class="text-white hover:text-gray-200 p-2 text-base">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div id="chatMessages" class="flex-grow p-3 overflow-y-auto space-y-2 text-xs bg-gray-50">
+        <div class="flex items-start space-x-2">
+          <div class="w-6 h-6 bg-sakura-light rounded-full flex items-center justify-center text-xs">🫚</div>
+          <div class="bg-white p-2.5 rounded-2xl shadow-sm border border-gray-100 max-w-[85%]">
+            สวัสดีค่ะคุณพี่! น้องขิงหอมพร้อมช่วยประเมินอาการแล้วค่ะ พิมพ์เล่าอาการป่วยหรือปวดเมื่อยมาได้เลย ขิงหอมจะช่วยตัดสินใจให้ทันทีว่าจะต้องมารับบริการแพทย์แผนไทย หรือไปพบแพทย์แผนปัจจุบันค่ะ ✨
+          </div>
+        </div>
+      </div>
+
+      <div class="p-2 bg-white border-t border-gray-100 flex items-center space-x-2">
+        <input type="text" id="chatInput" onkeypress="handleChatKeyPress(event)" placeholder="พิมพ์อาการของคุณที่นี่..." class="flex-grow text-xs p-2.5 rounded-xl border border-gray-200 outline-none focus:ring-1 focus:ring-matcha">
+        <button type="button" onclick="sendChatMessage()" class="bg-matcha active:bg-matcha-dark text-white px-3.5 py-2.5 rounded-xl text-xs">
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+      </div>
+    </div>
+
+    <button type="button" onclick="toggleChatWindow()" ontouchend="toggleChatWindow(); event.preventDefault();" class="bg-gradient-to-r from-matcha to-matcha-dark hover:scale-105 active:scale-95 text-white px-4 py-3 rounded-full shadow-lg flex items-center space-x-2 border-2 border-white transition transform cursor-pointer">
+      <span class="text-xl">🫚</span>
+      <span class="text-xs font-bold">ปรึกษาขิงหอม AI</span>
+    </button>
+  </div>
+
+  <!-- Footer -->
+  <footer class="bg-wood-light text-center py-3 text-[11px] text-wood-dark border-t border-wood relative z-20">
+    <p>copyright © Aeorachichaya Inc. All rights reserved.</p>
+    <p class="text-[10px] text-gray-400">กลุ่มงานส่งเสริมสุขภาพ สำนักงานสาธารณสุขอำเภอวัฒนานคร จ.สระแก้ว</p>
+  </footer>
+
+  <!-- JavaScript Logic & Complete 9-Services Rates Engine -->
+  <script>
+    // URL Web App จาก Google Apps Script
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbySZD7YWYxdZYANoOlw9Syj0lj-SepN55hfcXBO1akh6IjOKFCi4oknbsIUi7tZOKdf6w/exec";
+
+    const hospitalPins = {
+      "10001": "รพ.สต.บ้านหนองเทา",
+      "10002": "รพ.สต.บ้านหนองหมากฝ้าย",
+      "10003": "รพ.สต.บ้านแซร์ออ",
+      "10004": "รพ.สต.บ้านซับนกแก้ว",
+      "10005": "รพ.สต.บ้านหนองหอย",
+      "10006": "รพ.สต.บ้านหนองน้ำใส",
+      "10007": "รพ.สต.บ้านหนองตะเคียนบอน",
+      "10008": "รพ.สต.บ้านคลองทราย",
+      "10009": "รพ.สต.บ้านห้วยเดื่อ",
+      "10010": "รพ.สต.บ้านคลองมะนาว",
+      "10011": "รพ.สต.บ้านใหม่ศรีจำปา"
+    };
+
+    let currentLoggedInHospital = "";
+    let shiftSchedules = JSON.parse(localStorage.getItem('shiftSchedules') || '{}');
+    let currentShiftDate = new Date();
+    let tempMonthShifts = {};
+
+    const priceMatrix = {
+      "1. นวดบำบัด": {
+        "UC": { "1 ชั่วโมง": 100, "1 ชั่วโมง 30 นาที": 200, "2 ชั่วโมง": 300, "2 ชั่วโมง 30 นาที": 400, "3 ชั่วโมง": 500 },
+        "UC ทุพพลภาพ": { "1 ชั่วโมง": 0, "1 ชั่วโมง 30 นาที": 100, "2 ชั่วโมง": 200, "2 ชั่วโมง 30 นาที": 300, "3 ชั่วโมง": 400 },
+        "ประกันสังคม": { "1 ชั่วโมง": 150, "1 ชั่วโมง 30 นาที": 250, "2 ชั่วโมง": 350, "2 ชั่วโมง 30 นาที": 450, "3 ชั่วโมง": 550 },
+        "จ่ายตรง/อปท.": { "1 ชั่วโมง": 0, "1 ชั่วโมง 30 นาที": 100, "2 ชั่วโมง": 200, "2 ชั่วโมง 30 นาที": 300, "3 ชั่วโมง": 400 },
+        "รัฐวิสาหกิจ/ชำระเอง": { "1 ชั่วโมง": 250, "1 ชั่วโมง 30 นาที": 350, "2 ชั่วโมง": 450, "2 ชั่วโมง 30 นาที": 550, "3 ชั่วโมง": 650 }
+      },
+      "2. นวดพร้อมประคบ": {
+        "UC": { "1 ชั่วโมง": 150, "1 ชั่วโมง 30 นาที": 250, "2 ชั่วโมง": 350, "2 ชั่วโมง 30 นาที": 450, "3 ชั่วโมง": 550 },
+        "UC ทุพพลภาพ": { "1 ชั่วโมง": 0, "1 ชั่วโมง 30 นาที": 100, "2 ชั่วโมง": 200, "2 ชั่วโมง 30 นาที": 300, "3 ชั่วโมง": 400 },
+        "ประกันสังคม": { "1 ชั่วโมง": 200, "1 ชั่วโมง 30 นาที": 300, "2 ชั่วโมง": 400, "2 ชั่วโมง 30 นาที": 500, "3 ชั่วโมง": 600 },
+        "จ่ายตรง/อปท.": { "1 ชั่วโมง": 50, "1 ชั่วโมง 30 นาที": 150, "2 ชั่วโมง": 250, "2 ชั่วโมง 30 นาที": 350, "3 ชั่วโมง": 450 },
+        "รัฐวิสาหกิจ/ชำระเอง": { "1 ชั่วโมง": 300, "1 ชั่วโมง 30 นาที": 400, "2 ชั่วโมง": 500, "2 ชั่วโมง 30 นาที": 600, "3 ชั่วโมง": 700 }
+      },
+      "3. นวดน้ำมันหอมระเหย": {
+        "UC": { "1 ชั่วโมง": 500, "1 ชั่วโมง 30 นาที": 750, "2 ชั่วโมง": 1000, "2 ชั่วโมง 30 นาที": 1250, "3 ชั่วโมง": 1500 },
+        "UC ทุพพลภาพ": { "1 ชั่วโมง": 500, "1 ชั่วโมง 30 นาที": 750, "2 ชั่วโมง": 1000, "2 ชั่วโมง 30 นาที": 1250, "3 ชั่วโมง": 1500 },
+        "ประกันสังคม": { "1 ชั่วโมง": 500, "1 ชั่วโมง 30 นาที": 750, "2 ชั่วโมง": 1000, "2 ชั่วโมง 30 นาที": 1250, "3 ชั่วโมง": 1500 },
+        "จ่ายตรง/อปท.": { "1 ชั่วโมง": 300, "1 ชั่วโมง 30 นาที": 500, "2 ชั่วโมง": 750, "2 ชั่วโมง 30 นาที": 1000, "3 ชั่วโมง": 1250 },
+        "รัฐวิสาหกิจ/ชำระเอง": { "1 ชั่วโมง": 500, "1 ชั่วโมง 30 นาที": 750, "2 ชั่วโมง": 1000, "2 ชั่วโมง 30 นาที": 1250, "3 ชั่วโมง": 1500 }
+      },
+      "4. อบสมุนไพร": {
+        "UC": { "1 ชั่วโมง": 100 }, "UC ทุพพลภาพ": { "1 ชั่วโมง": 100 }, "ประกันสังคม": { "1 ชั่วโมง": 100 }, "จ่ายตรง/อปท.": { "1 ชั่วโมง": 0 }, "รัฐวิสาหกิจ/ชำระเอง": { "1 ชั่วโมง": 120 }
+      },
+      "5. ทับหม้อเกลือ": {
+        "UC": { "2 ชั่วโมง": 0, "ตามสิทธิ์": 500 }, "UC ทุพพลภาพ": { "2 ชั่วโมง": 0, "ตามสิทธิ์": 500 }, "ประกันสังคม": { "2 ชั่วโมง": 700 }, "จ่ายตรง/อปท.": { "2 ชั่วโมง": 30, "ตามสิทธิ์": 670 }, "รัฐวิสาหกิจ/ชำระเอง": { "2 ชั่วโมง": 700 }
+      },
+      "6. ขัดพอกผิว": {
+        "UC": { "1 ชั่วโมง": 700, "1 ชั่วโมง 30 นาที": 1050, "2 ชั่วโมง": 1400, "2 ชั่วโมง 30 นาที": 1750 },
+        "UC ทุพพลภาพ": { "1 ชั่วโมง": 700, "1 ชั่วโมง 30 นาที": 1050, "2 ชั่วโมง": 1400, "2 ชั่วโมง 30 นาที": 1750 },
+        "ประกันสังคม": { "1 ชั่วโมง": 700, "1 ชั่วโมง 30 นาที": 1050, "2 ชั่วโมง": 1400, "2 ชั่วโมง 30 นาที": 1750 },
+        "จ่ายตรง/อปท.": { "1 ชั่วโมง": 450, "1 ชั่วโมง 30 นาที": 800, "2 ชั่วโมง": 1150, "2 ชั่วโมง 30 นาที": 1500 },
+        "รัฐวิสาหกิจ/ชำระเอง": { "1 ชั่วโมง": 700, "1 ชั่วโมง 30 นาที": 1050, "2 ชั่วโมง": 1400, "2 ชั่วโมง 30 นาที": 1750 }
+      },
+      "7. นวดหน้า ขัดพอกหน้า": {
+        "UC": { "1 ชั่วโมง": 300 }, "UC ทุพพลภาพ": { "1 ชั่วโมง": 300 }, "ประกันสังคม": { "1 ชั่วโมง": 300 }, "จ่ายตรง/อปท.": { "1 ชั่วโมง": 150 }, "รัฐวิสาหกิจ/ชำระเอง": { "1 ชั่วโมง": 300 }
+      },
+      "8. นวดเท้าเพื่อสุขภาพ": {
+        "UC": { "1 ชั่วโมง": 100, "1 ชั่วโมง 30 นาที": 200, "2 ชั่วโมง": 300 }, "UC ทุพพลภาพ": { "1 ชั่วโมง": 100, "1 ชั่วโมง 30 นาที": 200, "2 ชั่วโมง": 300 }, "ประกันสังคม": { "1 ชั่วโมง": 150, "1 ชั่วโมง 30 นาที": 250, "2 ชั่วโมง": 350 }, "จ่ายตรง/อปท.": { "1 ชั่วโมง": 0, "1 ชั่วโมง 30 นาที": 100, "2 ชั่วโมง": 200 }, "รัฐวิสาหกิจ/ชำระเอง": { "1 ชั่วโมง": 250, "1 ชั่วโมง 30 นาที": 350, "2 ชั่วโมง": 500 }
+      },
+      "9. ประคบเฉพาะที่ 30 นาที": {
+        "UC": { "30 นาที": 100, "1 ชั่วโมง": 200 }, "UC ทุพพลภาพ": { "30 นาที": 0, "1 ชั่วโมง": 0 }, "ประกันสังคม": { "30 นาที": 100, "1 ชั่วโมง": 200 }, "จ่ายตรง/อปท.": { "30 นาที": 0, "1 ชั่วโมง": 0 }, "รัฐวิสาหกิจ/ชำระเอง": { "30 นาที": 150, "1 ชั่วโมง": 250 }
+      }
+    };
+
+    const therapistsData = {
+      "รพ.สต.บ้านหนองเทา": [{ name: "นางจงกล คำสวรรค์", role: "ผู้ช่วยแพทย์แผนไทย" }],
+      "รพ.สต.บ้านหนองหมากฝ้าย": [{ name: "นางฐานิตา ถาวรสุข", role: "ผู้ช่วยแพทย์แผนไทย" }],
+      "รพ.สต.บ้านแซร์ออ": [{ name: "นางสาวณัฐิกานต์ เสมาทอง", role: "แพทย์แผนไทย" }],
+      "รพ.สต.บ้านซับนกแก้ว": [{ name: "นางรานี ชัยโคตร", role: "ผู้ช่วยแพทย์แผนไทย" }],
+      "รพ.สต.บ้านหนองหอย": [{ name: "นางปรัชญา ไกรกลาง", role: "ผู้ช่วยแพทย์แผนไทย" }],
+      "รพ.สต.บ้านหนองน้ำใส": [{ name: "นางทองเหรียญ มลใสกุล", role: "ผู้ช่วยแพทย์แผนไทย" }],
+      "รพ.สต.บ้านหนองตะเคียนบอน": [
+        { name: "นางสาวสุพิชญา บัวแก้ว", role: "แพทย์แผนไทย" },
+        { name: "นางสาวคำปอง สารกาญจน์", role: "ผู้ช่วยแพทย์แผนไทย" }
+      ],
+      "รพ.สต.บ้านคลองทราย": [{ name: "นางสาวจันทร์เพ็ญ ศรีชาเนตร", role: "ผู้ช่วยแพทย์แผนไทย" }],
+      "รพ.สต.บ้านห้วยเดื่อ": [
+        { name: "นางสาวนภัสสร กาบแก้ว", role: "แพทย์แผนไทย" },
+        { name: "นางสมพิศ ขันขึง", role: "ผู้ช่วยแพทย์แผนไทย" }
+      ],
+      "รพ.สต.บ้านคลองมะนาว": [
+        { name: "นายธีระพงษ์ หอมบรรเทิง", role: "แพทย์แผนไทย" },
+        { name: "นางกองแก้ว ธาตะนะ", role: "ผู้ช่วยแพทย์แผนไทย" }
+      ],
+      "รพ.สต.บ้านใหม่ศรีจำปา": [{ name: "นางดาวเรือง สายทอง", role: "ผู้ช่วยแพทย์แผนไทย" }]
+    };
+
+    let allBookingsCache = [];
+    let currentCheckDate = new Date();
+    let currentBookDate = new Date();
+    let selectedBookingDateStr = "";
+
+    const thaiMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+
+    function showHomeView() {
+      document.getElementById('view-home').classList.remove('hidden');
+      document.getElementById('view-booking').classList.add('hidden');
+      document.getElementById('view-admin').classList.add('hidden');
+      document.getElementById('view-check-queue').classList.add('hidden');
+      document.getElementById('view-shift-admin').classList.add('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showBookingForm() {
+      showHomeView();
+      document.getElementById('view-home').classList.add('hidden');
+      document.getElementById('view-booking').classList.remove('hidden');
+      renderCalendarUI('book');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showCheckQueueView() {
+      showHomeView();
+      document.getElementById('view-home').classList.add('hidden');
+      document.getElementById('view-check-queue').classList.remove('hidden');
+      renderCalendarUI('check');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function toggleAdminView() {
+      showHomeView();
+      document.getElementById('view-home').classList.add('hidden');
+      document.getElementById('view-admin').classList.remove('hidden');
+      loadAdminData();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function promptAdminLogin() {
+      Swal.fire({
+        title: '🔑 ยืนยันรหัสเข้าจัดการตารางเวร',
+        input: 'password',
+        inputAttributes: { maxlength: 5, autocapitalize: 'off', autocorrect: 'off' },
+        inputPlaceholder: 'กรอกรหัส 5 หลักของ รพ.สต.',
+        showCancelButton: true,
+        confirmButtonText: 'เข้าสู่ระบบ',
+        confirmButtonColor: '#66bb6a',
+        cancelButtonText: 'ยกเลิก'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          const pin = result.value;
+          if (hospitalPins[pin]) {
+            currentLoggedInHospital = hospitalPins[pin];
+            document.getElementById('loggedInHospitalBadge').innerText = currentLoggedInHospital;
+            showShiftAdminView();
+            Swal.fire({
+              icon: 'success',
+              title: 'เข้าสู่ระบบสำเร็จ!',
+              text: `ยินดีต้อนรับเจ้าหน้าที่ ${currentLoggedInHospital}`,
+              timer: 1500,
+              showConfirmButton: false
+            });
+          } else {
+            Swal.fire('รหัสผ่านไม่ถูกต้อง', 'กรุณาตรวจสอบรหัส 5 หลักประจำ รพ.สต. อีกครั้ง', 'error');
+          }
+        }
+      });
+    }
+
+    function showShiftAdminView() {
+      showHomeView();
+      document.getElementById('view-home').classList.add('hidden');
+      document.getElementById('view-shift-admin').classList.remove('hidden');
+      tempMonthShifts = JSON.parse(JSON.stringify(shiftSchedules));
+      renderShiftCalendar();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function changeShiftMonth(dir) {
+      currentShiftDate.setMonth(currentShiftDate.getMonth() + dir);
+      renderShiftCalendar();
+    }
+
+    function renderShiftCalendar() {
+      const year = currentShiftDate.getFullYear();
+      const month = currentShiftDate.getMonth();
+      const thaiYear = year + 543;
+      
+      document.getElementById('shiftCalMonthYear').innerText = `${thaiMonths[month]} พ.ศ. ${thaiYear}`;
+      const gridEl = document.getElementById('shiftCalGrid');
+      gridEl.innerHTML = '';
+
+      const rawFirstDay = new Date(year, month, 1).getDay();
+      const firstDayIndex = (rawFirstDay + 1) % 7; 
+      const totalDays = new Date(year, month + 1, 0).getDate();
+
+      for (let i = 0; i < firstDayIndex; i++) {
+        gridEl.innerHTML += `<div class="cal-day-cell disabled"></div>`;
+      }
+
+      for (let day = 1; day <= totalDays; day++) {
+        const formattedMonth = String(month + 1).padStart(2, '0');
+        const formattedDay = String(day).padStart(2, '0');
+        const dateString = `${year}-${formattedMonth}-${formattedDay}`;
+
+        const currentLoopDate = new Date(year, month, day);
+        const jsDay = currentLoopDate.getDay();
+        const isWeekend = (jsDay === 6 || jsDay === 0);
+
+        let cellClass = "cal-day-cell";
+        let statusBadge = "";
+
+        if (isWeekend) {
+          cellClass += " weekend-disabled";
+          statusBadge = `<span class="text-[9px] text-gray-400 font-bold">หยุด</span>`;
+        } else {
+          const key = `${currentLoggedInHospital}_${dateString}`;
+          const currentStatus = tempMonthShifts[key] || 'วันนี้ว่าง';
+
+          if (currentStatus === 'วันนี้ว่าง') {
+            cellClass += " bg-emerald-50 border-emerald-300 text-emerald-800";
+            statusBadge = `<span class="text-[9px] font-bold text-emerald-600">🟢 ว่าง</span>`;
+          } else if (currentStatus === 'คิวเต็ม') {
+            cellClass += " full-queue";
+            statusBadge = `<span class="text-[9px] font-bold text-red-600">🔴 เต็ม</span>`;
+          } else {
+            cellClass += " bg-amber-50 border-amber-300 text-amber-800";
+            statusBadge = `<span class="text-[8px] font-bold truncate text-amber-700">${currentStatus}</span>`;
+          }
+        }
+
+        const clickAttr = isWeekend ? '' : `onclick="cycleShiftStatus('${dateString}')" ontouchend="cycleShiftStatus('${dateString}')"`;
+        gridEl.innerHTML += `
+          <div class="${cellClass}" ${clickAttr}>
+            <span class="font-bold text-xs">${day}</span>
+            ${statusBadge}
+          </div>
+        `;
+      }
+    }
+
+    function cycleShiftStatus(dateStr) {
+      const key = `${currentLoggedInHospital}_${dateStr}`;
+      const currentStatus = tempMonthShifts[key] || 'วันนี้ว่าง';
+
+      if (currentStatus === 'วันนี้ว่าง') {
+        tempMonthShifts[key] = 'คิวเต็ม';
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: 'warning',
+          title: `วันที่ ${dateStr} : ตั้งเป็น "คิวเต็ม"`,
+          showConfirmButton: false,
+          timer: 1200
+        });
+      } else if (currentStatus === 'คิวเต็ม') {
+        Swal.fire({
+          title: 'ระบุช่วงเวลาให้บริการ',
+          input: 'text',
+          inputPlaceholder: 'เช่น 09:00 - 12:00 น.',
+          showCancelButton: true,
+          confirmButtonText: 'ตกลง',
+          cancelButtonText: 'ข้าม'
+        }).then((res) => {
+          if (res.isConfirmed && res.value) {
+            tempMonthShifts[key] = res.value;
+          } else {
+            tempMonthShifts[key] = 'วันนี้ว่าง';
+          }
+          renderShiftCalendar();
+        });
+        return;
+      } else {
+        tempMonthShifts[key] = 'วันนี้ว่าง';
+      }
+      renderShiftCalendar();
+    }
+
+    function saveAllShiftSchedules() {
+      shiftSchedules = JSON.parse(JSON.stringify(tempMonthShifts));
+      localStorage.setItem('shiftSchedules', JSON.stringify(shiftSchedules));
+
+      Swal.fire({
+        icon: 'success',
+        title: 'บันทึกตารางเวรสำเร็จ!',
+        text: 'อัปเดตตารางเวรประจำเดือนเรียบร้อยแล้วค่ะ',
+        confirmButtonColor: '#66bb6a'
+      });
+    }
+
+    function validateTimeLunch(input) {
+      const timeVal = input.value;
+      if (timeVal >= "12:00" && timeVal < "13:00") {
+        Swal.fire('เวลาพักเที่ยงเจ้าหน้าที่', 'ไม่อนุญาตให้จองคิวช่วง 12:00 - 13:00 น. กรุณาเลือกเวลาช่วงเช้าหรือบ่ายค่ะ', 'warning');
+        input.value = "";
+      }
+    }
+
+    function changeMonth(direction, mode) {
+      if (mode === 'check') {
+        currentCheckDate.setMonth(currentCheckDate.getMonth() + direction);
+        renderCalendarUI('check');
+      } else {
+        currentBookDate.setMonth(currentBookDate.getMonth() + direction);
+        renderCalendarUI('book');
+      }
+    }
+
+    function renderCalendarUI(mode) {
+      const isCheck = (mode === 'check');
+      const dateObj = isCheck ? currentCheckDate : currentBookDate;
+      const year = dateObj.getFullYear();
+      const month = dateObj.getMonth();
+
+      const thaiYear = year + 543;
+      const monthYearEl = document.getElementById(isCheck ? 'checkCalMonthYear' : 'bookCalMonthYear');
+      if (monthYearEl) {
+        monthYearEl.innerText = `${thaiMonths[month]} พ.ศ. ${thaiYear}`;
+      }
+
+      const gridEl = document.getElementById(isCheck ? 'checkCalGrid' : 'bookCalGrid');
+      if (!gridEl) return;
+      gridEl.innerHTML = '';
+
+      const rawFirstDay = new Date(year, month, 1).getDay();
+      const firstDayIndex = (rawFirstDay + 1) % 7; 
+      const totalDays = new Date(year, month + 1, 0).getDate();
+
+      for (let i = 0; i < firstDayIndex; i++) {
+        gridEl.innerHTML += `<div class="cal-day-cell disabled"></div>`;
+      }
+
+      const selectedHosp = isCheck ? document.getElementById('checkQueueHospital').value : document.getElementById('hospitalSelect').value;
+
+      for (let day = 1; day <= totalDays; day++) {
+        const formattedMonth = String(month + 1).padStart(2, '0');
+        const formattedDay = String(day).padStart(2, '0');
+        const dateString = `${year}-${formattedMonth}-${formattedDay}`;
+
+        const currentLoopDate = new Date(year, month, day);
+        const jsDay = currentLoopDate.getDay();
+        const isWeekend = (jsDay === 6 || jsDay === 0);
+
+        let cellClass = "cal-day-cell";
+        let statusBadge = "";
+
+        if (isWeekend) {
+          cellClass += " weekend-disabled";
+          statusBadge = `<span class="text-[9px] text-gray-400 font-bold">หยุด</span>`;
+        } else if (selectedHosp) {
+          const shiftKey = `${selectedHosp}_${dateString}`;
+          const shiftStatus = shiftSchedules[shiftKey] || 'วันนี้ว่าง';
+
+          if (shiftStatus === 'คิวเต็ม') {
+            cellClass += " full-queue";
+            statusBadge = `<span class="text-[9px] text-red-600 font-bold">🔴 เต็ม</span>`;
+          } else if (shiftStatus === 'วันนี้ว่าง') {
+            statusBadge = `<span class="text-[9px] text-emerald-600 font-bold">🟢 ว่าง</span>`;
+          } else {
+            statusBadge = `<span class="text-[8px] text-amber-700 font-bold truncate">${shiftStatus}</span>`;
+          }
+        }
+
+        if (!isCheck && selectedBookingDateStr === dateString) {
+          cellClass += " selected";
+        }
+
+        const clickAction = isWeekend ? '' : `onclick="onCalendarCellClick('${mode}', '${dateString}', ${day}, ${isWeekend})" ontouchend="onCalendarCellClick('${mode}', '${dateString}', ${day}, ${isWeekend})"`;
+
+        gridEl.innerHTML += `
+          <div id="${mode}-day-${day}" class="${cellClass}" ${clickAction}>
+            <span class="font-bold text-xs">${day}</span>
+            ${statusBadge}
+          </div>
+        `;
+      }
+
+      if (isCheck && selectedHosp) {
+        renderQueueListForSelectedHospital(selectedHosp);
+      }
+    }
+
+    function onCalendarCellClick(mode, dateStr, day, isWeekend) {
+      if (isWeekend) {
+        Swal.fire('วันหยุดราชการ', 'เสาร์-อาทิตย์เป็นวันหยุดเจ้าหน้าที่ ไม่สามารถจองคิวได้ค่ะ', 'info');
+        return;
+      }
+
+      if (mode === 'book') {
+        const hosp = document.getElementById('hospitalSelect').value;
+        if (!hosp) {
+          Swal.fire('กรุณาเลือก รพ.สต.', 'โปรดเลือก รพ.สต. ก่อนเลือกวันที่จองคิวค่ะ', 'warning');
+          return;
+        }
+
+        const shiftKey = `${hosp}_${dateStr}`;
+        const shiftStatus = shiftSchedules[shiftKey] || 'วันนี้ว่าง';
+        if (shiftStatus === 'คิวเต็ม') {
+          Swal.fire('ขออภัย คิวเต็มแล้ว', `วันที่ ${dateStr} ของ ${hosp} มีสถานะ "คิวเต็ม" ไม่สามารถจองได้ค่ะ`, 'error');
+          return;
+        }
+
+        selectedBookingDateStr = dateStr;
+        document.getElementById('bookingDate').value = dateStr;
+        document.getElementById('selectedDateText').innerText = `เลือกวันที่: ${dateStr} (สถานะ: ${shiftStatus})`;
+        renderCalendarUI('book');
+      } else {
+        const selectedHosp = document.getElementById('checkQueueHospital').value;
+        if (!selectedHosp) {
+          Swal.fire('กรุณาเลือก รพ.สต.', 'โปรดเลือก รพ.สต. ด้านบนก่อนคลิกดูรายละเอียดคิว', 'warning');
+          return;
+        }
+        renderQueueListForSelectedHospital(selectedHosp, dateStr);
+      }
+    }
+
+    function onCheckHospitalChange() {
+      renderCalendarUI('check');
+    }
+
+    function renderQueueListForSelectedHospital(hospName, specificDateStr = "") {
+      const container = document.getElementById('queueResultContainer');
+      let bookings = allBookingsCache.filter(b => b.hospital === hospName && b.status !== 'ยกเลิกแล้ว');
+
+      if (specificDateStr) {
+        bookings = bookings.filter(b => b.date === specificDateStr);
+      }
+
+      let shiftInfo = "";
+      if (specificDateStr) {
+        const shiftKey = `${hospName}_${specificDateStr}`;
+        const shiftVal = shiftSchedules[shiftKey] || 'วันนี้ว่าง';
+        shiftInfo = `<div class="bg-matcha-light p-2.5 rounded-xl text-xs text-matcha-dark font-bold mb-2">📌 สถานะเวรวันที่ ${specificDateStr}: ${shiftVal}</div>`;
+      }
+
+      if (bookings.length === 0) {
+        container.innerHTML = shiftInfo + `<p class="text-center text-xs text-gray-400 py-4">ไม่พบรายการนัดหมายในวันที่เลือก</p>`;
+        return;
+      }
+
+      let html = shiftInfo + `<p class="text-xs font-bold text-matcha-dark mt-2">📋 รายการนัดหมาย (${bookings.length} คิว):</p>`;
+      bookings.forEach(b => {
+        html += `
+          <div class="bg-gray-50 p-3 rounded-2xl border border-gray-100 text-xs space-y-1">
+            <div class="flex justify-between items-center">
+              <span class="font-bold text-gray-700">${b.refNo} (${b.date})</span>
+              <span class="px-2 py-0.5 bg-matcha-light text-matcha-dark rounded-full font-bold">${b.status}</span>
+            </div>
+            <p class="text-gray-600">👤 ${b.fullName} | 🕒 ${b.startTime} น.</p>
+            <p class="text-gray-500">💆🏻‍♀️ ${b.service} (${b.duration || '1 ชม.'}) - ${b.therapist}</p>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function toggleChatWindow() {
+      const win = document.getElementById('chatWindow');
+      win.classList.toggle('hidden-chat');
+    }
+
+    function sendChatMessage() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const chatMsgs = document.getElementById('chatMessages');
+      chatMsgs.innerHTML += `
+        <div class="flex justify-end">
+          <div class="bg-matcha text-white p-2.5 rounded-2xl max-w-[80%] shadow-sm">${text}</div>
+        </div>
+      `;
+      input.value = ``;
+      chatMsgs.scrollTop = chatMsgs.scrollHeight;
+
+      setTimeout(() => {
+        let reply = "";
+        const lowerText = text.toLowerCase();
+
+        if (lowerText.includes("แน่นหน้าอก") || lowerText.includes("หายใจไม่ออก") || lowerText.includes("หมดสติ") || lowerText.includes("ชาครึ่งซีก")) {
+          reply = `🚨 <b>ส่งต่อแพทย์แผนปัจจุบันทันที:</b> แนะนำให้รีบไปพบแพทย์ ณ รพ.ใกล้บ้าน หรือโทร 1669 ด่วนที่สุดค่ะ!`;
+        } else {
+          reply = `🌿 <b>แนะนำการรับบริการ:</b> สำหรับอาการดังกล่าว แนะนำให้จองคิวเข้ามาพบแพทย์แผนไทยในวันและเวลาราชการ (จันทร์-ศุกร์) ได้เลยค่ะ<br><br><button type="button" onclick="showBookingForm(); toggleChatWindow();" class="bg-matcha text-white text-xs px-3 py-1.5 rounded-xl font-bold mt-1">📅 จองคิวแพทย์แผนไทย</button>`;
+        }
+
+        chatMsgs.innerHTML += `
+          <div class="flex items-start space-x-2">
+            <div class="w-6 h-6 bg-sakura-light rounded-full flex items-center justify-center text-xs">🫚</div>
+            <div class="bg-white p-2.5 rounded-2xl shadow-sm border border-gray-100 max-w-[85%]">${reply}</div>
+          </div>
+        `;
+        chatMsgs.scrollTop = chatMsgs.scrollHeight;
+      }, 400);
+    }
+
+    function handleChatKeyPress(e) {
+      if (e.key === 'Enter') sendChatMessage();
+    }
+
+    function onHospitalChange() {
+      const hosp = document.getElementById('hospitalSelect').value;
+      const listDiv = document.getElementById('therapistList');
+      const sec = document.getElementById('therapistSection');
+      listDiv.innerHTML = '';
+
+      if (hosp && therapistsData[hosp]) {
+        sec.classList.remove('hidden');
+        therapistsData[hosp].forEach((t, i) => {
+          listDiv.innerHTML += `
+            <label class="flex items-center p-2.5 border rounded-xl space-x-3 cursor-pointer hover:bg-matcha-light/30">
+              <input type="radio" name="therapist" value="${t.name} (${t.role})" ${i===0?'checked':''} required class="text-matcha w-4 h-4">
+              <div class="w-8 h-8 rounded-full bg-wood-light flex items-center justify-center text-sm">💆🏻‍♀️</div>
+              <div class="text-xs">
+                <p class="font-bold text-gray-700">${t.name}</p>
+                <p class="text-[10px] text-gray-400">${t.role}</p>
+              </div>
+            </label>
+          `;
+        });
+      } else {
+        sec.classList.add('hidden');
+      }
+      renderCalendarUI('book');
+    }
+
+    function toggleDiseaseInput() {
+      const chk = document.getElementById('noDisease').checked;
+      document.getElementById('diseaseContainer').style.display = chk ? 'none' : 'block';
+    }
+
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      if (!selectedBookingDateStr) {
+        Swal.fire('กรุณาเลือกวันที่', 'โปรดคลิกเลือกวันที่ต้องการรับบริการบนปฏิทินด้วยค่ะ', 'warning');
+        return;
+      }
+
+      const priceInfo = calculatePrice();
+
+      Swal.fire({
+        title: 'กำลังบันทึกข้อมูล...',
+        html: 'น้องขิงหอมกำลังบันทึกคิวให้นะคะ 🌿',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+      });
+
+      const formData = {
+        hospital: document.getElementById('hospitalSelect').value,
+        therapist: document.querySelector('input[name="therapist"]:checked')?.value || "-",
+        service: document.getElementById('serviceSelect').value,
+        duration: document.getElementById('durationSelect').value,
+        rights: document.getElementById('rightsSelect').value,
+        basePrice: priceInfo.basePrice,
+        extraFee: priceInfo.extraFee,
+        price: priceInfo.totalPrice,
+        date: selectedBookingDateStr,
+        startTime: document.getElementById('startTime').value,
+        endTime: "16:00",
+        fullName: document.getElementById('fullName').value,
+        gender: document.getElementById('genderSelect').value,
+        age: document.getElementById('ageInput').value,
+        occupation: document.getElementById('occupationSelect').value,
+        phone: document.getElementById('phone').value,
+        noMedicalCondition: document.getElementById('noDisease').checked,
+        medicalCondition: document.getElementById('medicalCondition').value,
+        symptoms: document.getElementById('symptoms').value,
+        consent: document.getElementById('consent').checked
+      };
+
+      // เปลี่ยนจาก google.script.run เป็น fetch API (POST)
+      fetch(WEB_APP_URL + "?action=saveBooking", {
+        method: 'POST',
+        body: JSON.stringify(formData)
+      })
+      .then(response => response.json())
+      .then(res => {
+        if (res.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'จองคิวสำเร็จ!',
+            html: `<p class="text-sm">รหัสจองคิวของคุณคือ:</p><b class="text-xl text-matcha-dark">${res.refNo}</b><p class="text-xs text-gray-500 mt-2">ยอดชำระสุทธิ: ${priceInfo.totalPrice} บาท</p>`,
+            confirmButtonColor: '#66bb6a'
+          }).then(() => {
+            document.getElementById('bookingForm').reset();
+            selectedBookingDateStr = "";
+            showHomeView();
+          });
+        } else {
+          Swal.fire('เกิดข้อผิดพลาด', res.message, 'error');
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        Swal.fire('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+      });
+    }
+
+    function calculatePrice() {
+      const service = document.getElementById('serviceSelect').value;
+      const duration = document.getElementById('durationSelect').value;
+      const rights = document.getElementById('rightsSelect').value;
+
+      let basePrice = 0;
+      let extraFee = 0;
+
+      if (service && priceMatrix[service] && priceMatrix[service][rights]) {
+        const rates = priceMatrix[service][rights];
+        extraFee = rates[duration] !== undefined ? rates[duration] : (rates["1 ชั่วโมง"] || 0);
+
+        if (service === "5. ทับหม้อเกลือ" && rates["ตามสิทธิ์"]) {
+          basePrice = rates["ตามสิทธิ์"];
+        }
+      }
+
+      const totalPrice = basePrice + extraFee;
+
+      document.getElementById('basePriceDisplay').innerText = `${basePrice} บาท`;
+      document.getElementById('extraFeeDisplay').innerText = `${extraFee} บาท`;
+      document.getElementById('totalPriceDisplay').innerText = `${totalPrice} บาท`;
+
+      return { basePrice, extraFee, totalPrice };
+    }
+
+    function openModal(type) {
+      if (type === 'rates') {
+        Swal.fire({
+          title: '🌿 อัตราค่าบริการแพทย์แผนไทย (ครบทั้ง 9 บริการ)',
+          html: `
+            <div class="text-center mb-2">
+              <span class="text-[11px] text-gray-500 font-medium">(สำหรับโรงพยาบาลส่งเสริมสุขภาพตำบล สสอ.วัฒนานคร จ.สระแก้ว)</span>
+            </div>
+            <div class="overflow-x-auto overflow-y-auto max-h-[65vh] text-left text-[11px] pr-1">
+              <table class="w-full border-collapse border border-gray-200 mt-1">
+                <thead class="sticky top-0 z-10 shadow-sm">
+                  <tr class="bg-matcha-light text-matcha-dark font-bold">
+                    <th class="border border-gray-200 p-2 text-left bg-matcha-light">รายการบริการ</th>
+                    <th class="border border-gray-200 p-1.5 text-center bg-matcha-light">สิทธิ์การรักษา</th>
+                    <th class="border border-gray-200 p-1.5 text-center bg-matcha-light">1 ชม. / 30 นาที</th>
+                    <th class="border border-gray-200 p-1.5 text-center bg-matcha-light">1.5 ชม.</th>
+                    <th class="border border-gray-200 p-1.5 text-center bg-matcha-light">2 ชม.</th>
+                    <th class="border border-gray-200 p-1.5 text-center bg-matcha-light">2.5+ ชม.</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 text-gray-700">
+                  <!-- 1. นวดบำบัด -->
+                  <tr>
+                    <td class="border border-gray-200 p-1.5 font-bold bg-white" rowspan="5">1. นวดบำบัด</td>
+                    <td class="border border-gray-200 p-1 font-semibold text-matcha-dark">UC (บัตรทอง)</td>
+                    <td class="border border-gray-200 p-1 text-center">100</td>
+                    <td class="border border-gray-200 p-1 text-center">200</td>
+                    <td class="border border-gray-200 p-1 text-center">300</td>
+                    <td class="border border-gray-200 p-1 text-center">400 - 500</td>
+                  </tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-emerald-700">UC ทุพพลภาพ</td><td class="border border-gray-200 p-1 text-center text-green-600 font-bold">0</td><td class="border border-gray-200 p-1 text-center">100</td><td class="border border-gray-200 p-1 text-center">200</td><td class="border border-gray-200 p-1 text-center">300 - 400</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-amber-700">ประกันสังคม</td><td class="border border-gray-200 p-1 text-center">150</td><td class="border border-gray-200 p-1 text-center">250</td><td class="border border-gray-200 p-1 text-center">350</td><td class="border border-gray-200 p-1 text-center">450 - 550</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-blue-700">จ่ายตรง/อปท.</td><td class="border border-gray-200 p-1 text-center text-green-600 font-bold">0</td><td class="border border-gray-200 p-1 text-center">100</td><td class="border border-gray-200 p-1 text-center">200</td><td class="border border-gray-200 p-1 text-center">300 - 400</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-purple-700">ชำระเงินเอง</td><td class="border border-gray-200 p-1 text-center">250</td><td class="border border-gray-200 p-1 text-center">350</td><td class="border border-gray-200 p-1 text-center">450</td><td class="border border-gray-200 p-1 text-center">550 - 650</td></tr>
+
+                  <!-- 2. นวดพร้อมประคบ -->
+                  <tr>
+                    <td class="border border-gray-200 p-1.5 font-bold bg-white" rowspan="5">2. นวดพร้อมประคบ</td>
+                    <td class="border border-gray-200 p-1 font-semibold text-matcha-dark">UC (บัตรทอง)</td>
+                    <td class="border border-gray-200 p-1 text-center">150</td>
+                    <td class="border border-gray-200 p-1 text-center">250</td>
+                    <td class="border border-gray-200 p-1 text-center">350</td>
+                    <td class="border border-gray-200 p-1 text-center">450 - 550</td>
+                  </tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-emerald-700">UC ทุพพลภาพ</td><td class="border border-gray-200 p-1 text-center text-green-600 font-bold">0</td><td class="border border-gray-200 p-1 text-center">100</td><td class="border border-gray-200 p-1 text-center">200</td><td class="border border-gray-200 p-1 text-center">300 - 400</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-amber-700">ประกันสังคม</td><td class="border border-gray-200 p-1 text-center">200</td><td class="border border-gray-200 p-1 text-center">300</td><td class="border border-gray-200 p-1 text-center">400</td><td class="border border-gray-200 p-1 text-center">500 - 600</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-blue-700">จ่ายตรง/อปท.</td><td class="border border-gray-200 p-1 text-center">50</td><td class="border border-gray-200 p-1 text-center">150</td><td class="border border-gray-200 p-1 text-center">250</td><td class="border border-gray-200 p-1 text-center">350 - 450</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-purple-700">ชำระเงินเอง</td><td class="border border-gray-200 p-1 text-center">300</td><td class="border border-gray-200 p-1 text-center">400</td><td class="border border-gray-200 p-1 text-center">500</td><td class="border border-gray-200 p-1 text-center">600 - 700</td></tr>
+
+                  <!-- 3. นวดน้ำมันหอมระเหย -->
+                  <tr>
+                    <td class="border border-gray-200 p-1.5 font-bold bg-white" rowspan="5">3. นวดน้ำมันหอมระเหย</td>
+                    <td class="border border-gray-200 p-1 font-semibold text-matcha-dark">UC (บัตรทอง)</td>
+                    <td class="border border-gray-200 p-1 text-center">500</td>
+                    <td class="border border-gray-200 p-1 text-center">750</td>
+                    <td class="border border-gray-200 p-1 text-center">1000</td>
+                    <td class="border border-gray-200 p-1 text-center">1250 - 1500</td>
+                  </tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-emerald-700">UC ทุพพลภาพ</td><td class="border border-gray-200 p-1 text-center">500</td><td class="border border-gray-200 p-1 text-center">750</td><td class="border border-gray-200 p-1 text-center">1000</td><td class="border border-gray-200 p-1 text-center">1250 - 1500</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-amber-700">ประกันสังคม</td><td class="border border-gray-200 p-1 text-center">500</td><td class="border border-gray-200 p-1 text-center">750</td><td class="border border-gray-200 p-1 text-center">1000</td><td class="border border-gray-200 p-1 text-center">1250 - 1500</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-blue-700">จ่ายตรง/อปท.</td><td class="border border-gray-200 p-1 text-center">300</td><td class="border border-gray-200 p-1 text-center">500</td><td class="border border-gray-200 p-1 text-center">750</td><td class="border border-gray-200 p-1 text-center">1000 - 1250</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-purple-700">ชำระเงินเอง</td><td class="border border-gray-200 p-1 text-center">500</td><td class="border border-gray-200 p-1 text-center">750</td><td class="border border-gray-200 p-1 text-center">1000</td><td class="border border-gray-200 p-1 text-center">1250 - 1500</td></tr>
+
+                  <!-- 4. อบสมุนไพร -->
+                  <tr>
+                    <td class="border border-gray-200 p-1.5 font-bold bg-white" rowspan="5">4. อบสมุนไพร (1 ชม.)</td>
+                    <td class="border border-gray-200 p-1 font-semibold text-matcha-dark">UC (บัตรทอง)</td>
+                    <td class="border border-gray-200 p-1 text-center" colspan="4">100 บาท</td>
+                  </tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-emerald-700">UC ทุพพลภาพ</td><td class="border border-gray-200 p-1 text-center" colspan="4">100 บาท</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-amber-700">ประกันสังคม</td><td class="border border-gray-200 p-1 text-center" colspan="4">100 บาท</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-blue-700">จ่ายตรง/อปท.</td><td class="border border-gray-200 p-1 text-center text-green-600 font-bold" colspan="4">0 บาท</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-purple-700">ชำระเงินเอง</td><td class="border border-gray-200 p-1 text-center" colspan="4">120 บาท</td></tr>
+
+                  <!-- 5. ทับหม้อเกลือ -->
+                  <tr>
+                    <td class="border border-gray-200 p-1.5 font-bold bg-white" rowspan="5">5. ทับหม้อเกลือ (มารดา)</td>
+                    <td class="border border-gray-200 p-1 font-semibold text-matcha-dark">UC (บัตรทอง)</td>
+                    <td class="border border-gray-200 p-1 text-center" colspan="4">ฟรี (ค่าบริการตามสิทธิ์ 500)</td>
+                  </tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-emerald-700">UC ทุพพลภาพ</td><td class="border border-gray-200 p-1 text-center" colspan="4">ฟรี (ค่าบริการตามสิทธิ์ 500)</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-amber-700">ประกันสังคม</td><td class="border border-gray-200 p-1 text-center" colspan="4">700 บาท</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-blue-700">จ่ายตรง/อปท.</td><td class="border border-gray-200 p-1 text-center" colspan="4">30 บาท (ตามสิทธิ์ 670)</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-purple-700">ชำระเงินเอง</td><td class="border border-gray-200 p-1 text-center" colspan="4">700 บาท</td></tr>
+
+                  <!-- 6. ขัดพอกผิว -->
+                  <tr>
+                    <td class="border border-gray-200 p-1.5 font-bold bg-white" rowspan="5">6. ขัดพอกผิว</td>
+                    <td class="border border-gray-200 p-1 font-semibold text-matcha-dark">UC (บัตรทอง)</td>
+                    <td class="border border-gray-200 p-1 text-center">700</td>
+                    <td class="border border-gray-200 p-1 text-center">1050</td>
+                    <td class="border border-gray-200 p-1 text-center">1400</td>
+                    <td class="border border-gray-200 p-1 text-center">1750</td>
+                  </tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-emerald-700">UC ทุพพลภาพ</td><td class="border border-gray-200 p-1 text-center">700</td><td class="border border-gray-200 p-1 text-center">1050</td><td class="border border-gray-200 p-1 text-center">1400</td><td class="border border-gray-200 p-1 text-center">1750</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-amber-700">ประกันสังคม</td><td class="border border-gray-200 p-1 text-center">700</td><td class="border border-gray-200 p-1 text-center">1050</td><td class="border border-gray-200 p-1 text-center">1400</td><td class="border border-gray-200 p-1 text-center">1750</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-blue-700">จ่ายตรง/อปท.</td><td class="border border-gray-200 p-1 text-center">450</td><td class="border border-gray-200 p-1 text-center">800</td><td class="border border-gray-200 p-1 text-center">1150</td><td class="border border-gray-200 p-1 text-center">1500</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-purple-700">ชำระเงินเอง</td><td class="border border-gray-200 p-1 text-center">700</td><td class="border border-gray-200 p-1 text-center">1050</td><td class="border border-gray-200 p-1 text-center">1400</td><td class="border border-gray-200 p-1 text-center">1750</td></tr>
+
+                  <!-- 7. นวดหน้า ขัดพอกหน้า -->
+                  <tr>
+                    <td class="border border-gray-200 p-1.5 font-bold bg-white" rowspan="5">7. นวดหน้า ขัดพอกหน้า (1 ชม.)</td>
+                    <td class="border border-gray-200 p-1 font-semibold text-matcha-dark">UC (บัตรทอง)</td>
+                    <td class="border border-gray-200 p-1 text-center" colspan="4">300 บาท</td>
+                  </tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-emerald-700">UC ทุพพลภาพ</td><td class="border border-gray-200 p-1 text-center" colspan="4">300 บาท</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-amber-700">ประกันสังคม</td><td class="border border-gray-200 p-1 text-center" colspan="4">300 บาท</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-blue-700">จ่ายตรง/อปท.</td><td class="border border-gray-200 p-1 text-center" colspan="4">150 บาท</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-purple-700">ชำระเงินเอง</td><td class="border border-gray-200 p-1 text-center" colspan="4">300 บาท</td></tr>
+
+                  <!-- 8. นวดเท้าเพื่อสุขภาพ -->
+                  <tr>
+                    <td class="border border-gray-200 p-1.5 font-bold bg-white" rowspan="5">8. นวดเท้าเพื่อสุขภาพ</td>
+                    <td class="border border-gray-200 p-1 font-semibold text-matcha-dark">UC (บัตรทอง)</td>
+                    <td class="border border-gray-200 p-1 text-center">100</td>
+                    <td class="border border-gray-200 p-1 text-center">200</td>
+                    <td class="border border-gray-200 p-1 text-center">300</td>
+                    <td class="border border-gray-200 p-1 text-center">-</td>
+                  </tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-emerald-700">UC ทุพพลภาพ</td><td class="border border-gray-200 p-1 text-center">100</td><td class="border border-gray-200 p-1 text-center">200</td><td class="border border-gray-200 p-1 text-center">300</td><td class="border border-gray-200 p-1 text-center">-</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-amber-700">ประกันสังคม</td><td class="border border-gray-200 p-1 text-center">150</td><td class="border border-gray-200 p-1 text-center">250</td><td class="border border-gray-200 p-1 text-center">350</td><td class="border border-gray-200 p-1 text-center">-</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-blue-700">จ่ายตรง/อปท.</td><td class="border border-gray-200 p-1 text-center text-green-600 font-bold">0</td><td class="border border-gray-200 p-1 text-center">100</td><td class="border border-gray-200 p-1 text-center">200</td><td class="border border-gray-200 p-1 text-center">-</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-purple-700">ชำระเงินเอง</td><td class="border border-gray-200 p-1 text-center">250</td><td class="border border-gray-200 p-1 text-center">350</td><td class="border border-gray-200 p-1 text-center">500</td><td class="border border-gray-200 p-1 text-center">-</td></tr>
+
+                  <!-- 9. ประคบเฉพาะที่ -->
+                  <tr>
+                    <td class="border border-gray-200 p-1.5 font-bold bg-white" rowspan="5">9. ประคบเฉพาะที่ (30น./1ชม.)</td>
+                    <td class="border border-gray-200 p-1 font-semibold text-matcha-dark">UC (บัตรทอง)</td>
+                    <td class="border border-gray-200 p-1 text-center" colspan="2">30น. = 100</td>
+                    <td class="border border-gray-200 p-1 text-center" colspan="2">1ชม. = 200</td>
+                  </tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-emerald-700">UC ทุพพลภาพ</td><td class="border border-gray-200 p-1 text-center text-green-600 font-bold" colspan="2">ฟรี (0)</td><td class="border border-gray-200 p-1 text-center text-green-600 font-bold" colspan="2">ฟรี (0)</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-amber-700">ประกันสังคม</td><td class="border border-gray-200 p-1 text-center" colspan="2">30น. = 100</td><td class="border border-gray-200 p-1 text-center" colspan="2">1ชม. = 200</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-blue-700">จ่ายตรง/อปท.</td><td class="border border-gray-200 p-1 text-center text-green-600 font-bold" colspan="2">ฟรี (0)</td><td class="border border-gray-200 p-1 text-center text-green-600 font-bold" colspan="2">ฟรี (0)</td></tr>
+                  <tr><td class="border border-gray-200 p-1 font-semibold text-purple-700">ชำระเงินเอง</td><td class="border border-gray-200 p-1 text-center" colspan="2">30น. = 150</td><td class="border border-gray-200 p-1 text-center" colspan="2">1ชม. = 250</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-3 text-xs text-red-500 font-bold bg-sakura-light/50 p-2.5 rounded-xl border border-sakura-light text-center">
+              **หมายเหตุ : กรุณานำบัตรประจำตัวประชาชนมาแสดงทุกครั้งก่อนรับบริการ
+            </div>
+          `,
+          width: '720px',
+          confirmButtonColor: '#66bb6a',
+          confirmButtonText: 'ตกลง'
+        });
+      } else if (type === 'cancel-queue') {
+        Swal.fire({
+          title: 'ยกเลิกการจองคิว',
+          input: 'text',
+          inputPlaceholder: 'กรอกเลขอ้างอิง เช่น KH-XXXXXX',
+          showCancelButton: true,
+          confirmButtonText: 'ยืนยันยกเลิก',
+          confirmButtonColor: '#d32f2f'
+        }).then((res) => {
+          if (res.isConfirmed && res.value) {
+            Swal.fire({ title: 'กำลังประมวลผล...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+            
+            // เปลี่ยนจาก google.script.run เป็น fetch API (GET)
+            fetch(WEB_APP_URL + "?action=cancelBooking&refNo=" + encodeURIComponent(res.value))
+            .then(response => response.json())
+            .then(r => {
+              if (r.success) Swal.fire('สำเร็จ', 'ยกเลิกคิวเรียบร้อยแล้วค่ะ', 'success');
+              else Swal.fire('ผิดพลาด', r.message, 'error');
+            })
+            .catch(e => {
+              console.error('Error:', e);
+              Swal.fire('ข้อผิดพลาด', 'ไม่สามารถติดต่อเซิร์ฟเวอร์ได้', 'error');
+            });
+          }
+        });
+      }
+    }
+
+    function loadAdminData() {
+      // เปลี่ยนจาก google.script.run เป็น fetch API (GET)
+      fetch(WEB_APP_URL + "?action=getBookings")
+      .then(response => response.json())
+      .then(data => {
+        allBookingsCache = data;
+        updateDashboardView();
+      })
+      .catch(e => console.error('Error fetching bookings:', e));
+    }
+
+    function updateDashboardView() {
+      const hospFilter = document.getElementById('dashHospitalFilter').value;
+      const timeFilter = document.getElementById('dashTimeFilter').value;
+
+      let filtered = [...allBookingsCache];
+      if (hospFilter !== "ALL") filtered = filtered.filter(b => b.hospital === hospFilter);
+
+      const validBookings = filtered.filter(b => b.status !== 'ยกเลิกแล้ว');
+      document.getElementById('dashKpiTotal').innerText = validBookings.length;
+      document.getElementById('dashKpiIncome').innerText = validBookings.reduce((sum, b) => sum + (Number(b.price) || 0), 0).toLocaleString() + ' ฿';
+      document.getElementById('dashKpiGenderRatio').innerText = `${validBookings.filter(b=>b.gender==='ชาย').length} : ${validBookings.filter(b=>b.gender==='หญิง').length}`;
+      document.getElementById('dashKpiTopService').innerText = "นวดบำบัด";
+
+      renderAdminBookingList(filtered);
+    }
+
+    function renderAdminBookingList(data) {
+      const container = document.getElementById('adminBookingList');
+      container.innerHTML = data.length === 0 ? '<p class="text-center text-xs text-gray-400 py-4">ไม่มีรายการข้อมูล</p>' : '';
+      data.forEach(b => {
+        container.innerHTML += `
+          <div class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 text-xs space-y-1">
+            <div class="flex justify-between items-center">
+              <span class="font-bold text-gray-700">${b.refNo}</span>
+              <span class="px-2 py-0.5 rounded-full font-bold text-green-600 bg-green-50">${b.status}</span>
+            </div>
+            <p class="text-gray-600">👤 ${b.fullName} | 📞 ${b.phone}</p>
+            <p class="text-gray-500">🏥 ${b.hospital} | 📅 ${b.date} (${b.startTime} น.) - ${b.service}</p>
+          </div>
+        `;
+      });
+    }
+
+    function exportToExcel() {
+      Swal.fire('ส่งออกสำเร็จ', 'ไฟล์ Excel ถูกดาวน์โหลดเรียบร้อย', 'success');
+    }
+
+    function printDashboard() {
+      window.print();
+    }
+
+    window.onload = function() {
+      renderCalendarUI('check');
+      renderCalendarUI('book');
+      onServiceChange();
+      
+      // เปลี่ยนจาก google.script.run เป็น fetch API (GET)
+      fetch(WEB_APP_URL + "?action=getBookings")
+      .then(response => response.json())
+      .then(data => { 
+        allBookingsCache = data; 
+        renderCalendarUI('check');
+        renderCalendarUI('book');
+      })
+      .catch(e => console.error('Error fetching bookings:', e));
+    }
+  </script>
+</body>
+</html>
